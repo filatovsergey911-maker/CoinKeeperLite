@@ -8,17 +8,7 @@ import {
   Alert 
 } from 'react-native';
 import { Card, Title, Divider, Button, List } from 'react-native-paper';
-import * as Notifications from 'expo-notifications';
 import { loadUserStats, saveUserStats } from '../data/achievementStorage';
-
-// Настройка уведомлений
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
 
 const SettingsScreen = () => {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
@@ -98,20 +88,6 @@ const SettingsScreen = () => {
       if (trigger < now) {
         trigger.setDate(trigger.getDate() + 1);
       }
-      
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: '💰 Не забывайте о накоплениях!',
-          body: 'Проверьте свои цели и внесите сегодняшнюю сумму',
-          sound: 'default',
-          data: { type: 'reminder' },
-        },
-        trigger: {
-          hour: hour,
-          minute: 0,
-          repeats: true,
-        },
-      });
     }
     
     // Ежедневное уведомление с мотивацией

@@ -62,11 +62,13 @@ const AchievementsScreen = () => {
         
         {!item.completed && (
           <View style={styles.progressContainer}>
-            <ProgressBar 
-              progress={item.progress / item.requirement} 
-              style={styles.progressBar}
-              color="#4CAF50"
+            <View style={styles.progressBarContainer}>
+             <ProgressBar 
+                progress={item.progress / item.requirement} 
+                style={styles.progressBar}
+               color="#4CAF50"
             />
+            </View>
             <Text style={styles.progressText}>
               {item.progress} / {item.requirement}
             </Text>
@@ -281,8 +283,8 @@ const styles = StyleSheet.create({
   },
   progressBar: {
     flex: 1,
-    height: 6,
-    borderRadius: 3,
+    height: 13,
+    borderRadius: 5,
     marginRight: 10,
   },
   progressText: {
@@ -308,6 +310,11 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#4CAF50',
   },
+  progressBarContainer: {
+  flex: 1,
+  overflow: 'hidden',
+  borderRadius: 3, // Такая же, как у progressBar
+},
 });
 
 export default AchievementsScreen;

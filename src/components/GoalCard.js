@@ -22,7 +22,7 @@ const GoalCard = ({ goal, onAddMoney, onDelete, onEdit, isNewlyCompleted = false
   const [menuVisible, setMenuVisible] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
   const progress = goal.currentAmount / goal.targetAmount;
-  const progressPercentage = Math.min(Math.round(progress * 100), 100);
+  const progressPercentage = Math.min(progress * 100, 100);
   
   // Форматируем суммы
   const currentAmountFormatted = Goal.formatAmount(goal.currentAmount);
@@ -149,7 +149,7 @@ const GoalCard = ({ goal, onAddMoney, onDelete, onEdit, isNewlyCompleted = false
               showAnimation={goal.isCompleted}
             />
           </View>
-          <Text style={styles.progressText}>{progressPercentage}%</Text>
+          <Text style={styles.progressText}>{progressPercentage.toFixed(2)}%</Text>
         </View>
 
         {/* Статистика и дата */}
