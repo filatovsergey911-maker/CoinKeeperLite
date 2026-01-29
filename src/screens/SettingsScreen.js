@@ -1,287 +1,203 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  View, 
-  StyleSheet, 
-  ScrollView, 
-  Text, 
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
   Switch,
-  Alert 
+  Alert,
+  TouchableOpacity,
 } from 'react-native';
-import { Card, Title, Divider, Button, List } from 'react-native-paper';
-import { loadUserStats, saveUserStats } from '../data/achievementStorage';
+import { useAuth } from '../auth/AuthContext';
+import * as LocalAuthentication from 'expo-local-authentication';
 
 const SettingsScreen = () => {
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [notificationInterval, setNotificationInterval] = useState(60);
-  const [userStats, setUserStats] = useState(null);
+  const { user, logout, usePin, userPin } = useAuth();
+  const [useBiometrics, setUseBiometrics] = useState(false);
+  const [notifications, setNotifications] = useState(true);
 
-  useEffect(() => {
-    loadData();
-    requestPermissions();
-  }, []);
-
-  const loadData = async () => {
-    const stats = await loadUserStats();
-    if (stats) {
-      setUserStats(stats);
-      setNotificationsEnabled(stats.notificationsEnabled);
-      setNotificationInterval(stats.notificationInterval);
-    }
+  // Проверка поддержки биометрии
+  const checkBiometricsSupport = async () => {
+    const hasHardware = await LocalAuthentication.hasHardwareAsync();
+    const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+    return hasHardware && isEnrolled;
   };
 
-  const requestPermissions = async () => {
-    const { status } = await Notifications.requestPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Уведомления отключены', 'Разрешите уведомления в настройках устройства');
-    }
-  };
+  const handleLogout = () => {
+  Alert.alert(
+    'Выход из аккаунта',
+    'Все данные сохранятся на устройстве.',
+    [
+      { text: 'Отмена', style: 'cancel' },
+      {
+        text: 'Выйти',
+        style: 'destructive',
+        onPress: async () => {
+          await logout();
+          // Дополнительно: можно сбросить навигацию к корню
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'Login' }],
+          });
+        },
+      },
+    ]
+  );
+};
 
-  const handleNotificationsToggle = async (value) => {
-    setNotificationsEnabled(value);
+  const handleBiometricsToggle = async (value) => {
+    const supported = await checkBiometricsSupport();
     
-    if (userStats) {
-      const updatedStats = {
-        ...userStats,
-        notificationsEnabled: value,
-      };
-      await saveUserStats(updatedStats);
-      setUserStats(updatedStats);
+    if (value && !supported) {
+      Alert.alert('Биометрия не поддерживается', 'На вашем устройстве не настроены отпечатки пальцев или Face ID.');
+      setUseBiometrics(false);
+      return;
     }
+    
+    setUseBiometrics(value);
     
     if (value) {
-      await scheduleNotifications();
-    } else {
-      await Notifications.cancelAllScheduledNotificationsAsync();
-    }
-  };
-
-  const handleIntervalChange = async (minutes) => {
-    setNotificationInterval(minutes);
-    
-    if (userStats) {
-      const updatedStats = {
-        ...userStats,
-        notificationInterval: minutes,
-      };
-      await saveUserStats(updatedStats);
-      setUserStats(updatedStats);
-    }
-    
-    if (notificationsEnabled) {
-      await scheduleNotifications();
-    }
-  };
-
-  const scheduleNotifications = async () => {
-    await Notifications.cancelAllScheduledNotificationsAsync();
-    
-    if (!notificationsEnabled) return;
-    
-    // Создаем уведомления на день
-    const intervals = [10, 14, 18]; // 10:00, 14:00, 18:00
-    const now = new Date();
-    
-    for (const hour of intervals) {
-      const trigger = new Date(now);
-      trigger.setHours(hour, 0, 0, 0);
-      
-      if (trigger < now) {
-        trigger.setDate(trigger.getDate() + 1);
+      try {
+        const result = await LocalAuthentication.authenticateAsync({
+          promptMessage: 'Подтвердите для включения биометрии',
+          fallbackLabel: 'Использовать пин-код',
+        });
+        
+        if (!result.success) {
+          setUseBiometrics(false);
+        }
+      } catch (error) {
+        Alert.alert('Ошибка', 'Не удалось настроить биометрию');
+        setUseBiometrics(false);
       }
     }
-    
-    // Ежедневное уведомление с мотивацией
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: '🎯 Прогресс по целям',
-        body: 'Посмотрите, как растут ваши накопления!',
-        sound: 'default',
-        data: { type: 'daily_progress' },
-      },
-      trigger: {
-        hour: 9,
-        minute: 0,
-        repeats: true,
-      },
-    });
-  };
-
-  const sendTestNotification = async () => {
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: 'Тестовое уведомление ✅',
-        body: 'Уведомления работают правильно!',
-        sound: 'default',
-      },
-      trigger: {
-        seconds: 2,
-      },
-    });
-    
-    Alert.alert('Уведомление отправлено', 'Проверьте свой экран');
-  };
-
-  const clearAllData = () => {
-    Alert.alert(
-      'Очистка данных',
-      'Вы уверены, что хотите удалить все данные? Это действие нельзя отменить.',
-      [
-        { text: 'Отмена', style: 'cancel' },
-        { 
-          text: 'Удалить все', 
-          style: 'destructive',
-          onPress: async () => {
-            // Здесь будет очистка всех данных
-            Alert.alert('В разработке', 'Функция будет добавлена в следующем обновлении');
-          }
-        }
-      ]
-    );
   };
 
   return (
     <ScrollView style={styles.container}>
-      {/* Настройки уведомлений */}
-      <Card style={styles.sectionCard}>
-        <Card.Content>
-          <Title style={styles.sectionTitle}>🔔 Уведомления</Title>
-          
-          <List.Item
-            title="Включить уведомления"
-            description="Напоминания о пополнении целей"
-            left={props => <List.Icon {...props} icon="bell" />}
-            right={() => (
-              <Switch
-                value={notificationsEnabled}
-                onValueChange={handleNotificationsToggle}
-                color="#2196F3"
-              />
-            )}
-          />
-          
-          <Divider style={styles.divider} />
-          
-          <Text style={styles.subtitle}>Интервал напоминаний:</Text>
-          <View style={styles.intervalButtons}>
-            {[30, 60, 120, 240].map((minutes) => (
-              <Button
-                key={minutes}
-                mode={notificationInterval === minutes ? "contained" : "outlined"}
-                onPress={() => handleIntervalChange(minutes)}
-                style={styles.intervalButton}
-                compact
-              >
-                {minutes} мин
-              </Button>
-            ))}
+      {/* Заголовок */}
+      <View style={styles.header}>
+        <Text style={styles.title}>Настройки</Text>
+        <Text style={styles.subtitle}>
+          {user?.email || 'Пользователь'}
+        </Text>
+      </View>
+
+      {/* Раздел: Аккаунт */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Аккаунт</Text>
+        
+        <View style={styles.settingItem}>
+          <Text style={styles.settingLabel}>Email</Text>
+          <Text style={styles.settingValue}>{user?.email || 'Не указан'}</Text>
+        </View>
+        
+        <TouchableOpacity 
+          style={styles.settingItem}
+          onPress={() => Alert.alert('Смена пароля', 'Функция в разработке')}
+        >
+          <Text style={styles.settingLabel}>Сменить пароль</Text>
+          <Text style={styles.arrow}>›</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Раздел: Безопасность */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Безопасность</Text>
+        
+        <View style={styles.settingItem}>
+          <View>
+            <Text style={styles.settingLabel}>Пин-код</Text>
+            <Text style={styles.settingDescription}>
+              {usePin && userPin ? 'Настроен' : 'Не настроен'}
+            </Text>
           </View>
-          
-          <Button
-            mode="outlined"
-            onPress={sendTestNotification}
-            style={styles.testButton}
-            icon="bell-ring"
+          <TouchableOpacity
+            onPress={() => Alert.alert('Пин-код', 'Изменить пин-код можно в настройках безопасности')}
           >
-            Тестовое уведомление
-          </Button>
-        </Card.Content>
-      </Card>
-
-      {/* Статистика приложения */}
-      <Card style={styles.sectionCard}>
-        <Card.Content>
-          <Title style={styles.sectionTitle}>📊 Статистика</Title>
-          
-          {userStats && (
-            <View style={styles.statsGrid}>
-              <View style={styles.statBox}>
-                <Text style={styles.statValue}>{userStats.totalGoals || 0}</Text>
-                <Text style={styles.statLabel}>Всего целей</Text>
-              </View>
-              <View style={styles.statBox}>
-                <Text style={styles.statValue}>{userStats.completedGoals || 0}</Text>
-                <Text style={styles.statLabel}>Выполнено</Text>
-              </View>
-              <View style={styles.statBox}>
-                <Text style={styles.statValue}>{userStats.currentStreak || 0}</Text>
-                <Text style={styles.statLabel}>Дней подряд</Text>
-              </View>
-              <View style={styles.statBox}>
-                <Text style={styles.statValue}>
-                  {userStats.totalPoints || 0}
-                </Text>
-                <Text style={styles.statLabel}>Очков</Text>
-              </View>
-            </View>
-          )}
-          
-          <Button
-            mode="contained"
-            onPress={() => {/* Навигация к достижениям */}}
-            style={styles.achievementsButton}
-            icon="trophy"
-          >
-            Мои достижения
-          </Button>
-        </Card.Content>
-      </Card>
-
-      {/* О приложении */}
-      <Card style={styles.sectionCard}>
-        <Card.Content>
-          <Title style={styles.sectionTitle}>ℹ️ О приложении</Title>
-          
-          <List.Item
-            title="Версия"
-            description="1.0.0"
-            left={props => <List.Icon {...props} icon="information" />}
+            <Text style={styles.settingAction}>
+              {usePin && userPin ? 'Изменить' : 'Настроить'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+        
+        <View style={styles.settingItem}>
+          <View>
+            <Text style={styles.settingLabel}>Биометрия</Text>
+            <Text style={styles.settingDescription}>
+              Отпечаток пальца / Face ID
+            </Text>
+          </View>
+          <Switch
+            value={useBiometrics}
+            onValueChange={handleBiometricsToggle}
+            trackColor={{ false: '#ddd', true: '#2196F3' }}
           />
-          
-          <List.Item
-            title="Разработчик"
-            description="Sergey Filatov"
-            left={props => <List.Icon {...props} icon="account" />}
-          />
-          
-          <List.Item
-            title="Обратная связь"
-            description="Напишите нам"
-            left={props => <List.Icon {...props} icon="email" />}
-            onPress={() => Alert.alert('Обратная связь', 'Email: support@coinkeeper.app')}
-          />
-          
-          <Button
-            mode="outlined"
-            onPress={() => Alert.alert('Оцените нас', 'Ссылка на магазин приложений')}
-            style={styles.rateButton}
-            icon="star"
-          >
-            Оценить приложение
-          </Button>
-        </Card.Content>
-      </Card>
+        </View>
+      </View>
 
-      {/* Опасная зона */}
-      <Card style={[styles.sectionCard, styles.dangerZone]}>
-        <Card.Content>
-          <Title style={[styles.sectionTitle, styles.dangerTitle]}>⚠️ Опасная зона</Title>
-          
-          <Button
-            mode="outlined"
-            onPress={clearAllData}
-            style={styles.dangerButton}
-            textColor="#F44336"
-            icon="delete"
-          >
-            Удалить все данные
-          </Button>
-          
-          <Text style={styles.warningText}>
-            Это действие удалит все цели, историю и настройки.
-            Восстановление данных невозможно.
-          </Text>
-        </Card.Content>
-      </Card>
+      {/* Раздел: Уведомления */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Уведомления</Text>
+        
+        <View style={styles.settingItem}>
+          <Text style={styles.settingLabel}>Напоминания</Text>
+          <Switch
+            value={notifications}
+            onValueChange={setNotifications}
+            trackColor={{ false: '#ddd', true: '#4CAF50' }}
+          />
+        </View>
+      </View>
+
+      {/* Раздел: О приложении */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>О приложении</Text>
+        
+        <View style={styles.settingItem}>
+          <Text style={styles.settingLabel}>Версия</Text>
+          <Text style={styles.settingValue}>1.0.0</Text>
+        </View>
+        
+        <TouchableOpacity 
+          style={styles.settingItem}
+          onPress={() => Alert.alert('Помощь', 'Документация в разработке')}
+        >
+          <Text style={styles.settingLabel}>Помощь</Text>
+          <Text style={styles.arrow}>›</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={styles.settingItem}
+          onPress={() => Alert.alert('Политика', 'Конфиденциальность в разработке')}
+        >
+          <Text style={styles.settingLabel}>Конфиденциальность</Text>
+          <Text style={styles.arrow}>›</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Кнопка выхода */}
+      <TouchableOpacity
+        style={styles.logoutButton}
+        onPress={handleLogout}
+      >
+        <Text style={styles.logoutButtonText}>Выйти из аккаунта</Text>
+      </TouchableOpacity>
+
+      {/* Удаление аккаунта (опасная зона) */}
+      <TouchableOpacity
+        style={styles.deleteAccountButton}
+        onPress={() => Alert.alert(
+          'Удаление аккаунта',
+          'Эта операция удалит все ваши данные без возможности восстановления.',
+          [
+            { text: 'Отмена', style: 'cancel' },
+            { text: 'Удалить', style: 'destructive' },
+          ]
+        )}
+      >
+        <Text style={styles.deleteAccountText}>Удалить аккаунт</Text>
+      </TouchableOpacity>
     </ScrollView>
   );
 };
@@ -290,86 +206,101 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
-    padding: 16,
   },
-  sectionCard: {
+  header: {
+    backgroundColor: '#2196F3',
+    padding: 25,
+    paddingTop: 40,
     marginBottom: 20,
   },
-  sectionTitle: {
-    fontSize: 18,
-    marginBottom: 16,
-    color: '#2196F3',
-  },
-  divider: {
-    marginVertical: 12,
+  title: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 5,
   },
   subtitle: {
+    fontSize: 16,
+    color: 'rgba(255, 255, 255, 0.8)',
+  },
+  section: {
+    backgroundColor: '#fff',
+    marginHorizontal: 16,
+    marginBottom: 16,
+    borderRadius: 12,
+    paddingVertical: 8,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+  },
+  sectionTitle: {
     fontSize: 14,
     fontWeight: '600',
     color: '#666',
-    marginBottom: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
-  intervalButtons: {
+  settingItem: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 16,
-  },
-  intervalButton: {
-    flex: 1,
-    minWidth: '22%',
-  },
-  testButton: {
-    marginTop: 8,
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
   },
-  statBox: {
-    width: '48%',
-    backgroundColor: '#F5F5F5',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 8,
+  settingLabel: {
+    fontSize: 16,
+    color: '#333',
+  },
+  settingDescription: {
+    fontSize: 13,
+    color: '#666',
+    marginTop: 3,
+  },
+  settingValue: {
+    fontSize: 16,
+    color: '#666',
+  },
+  settingAction: {
+    fontSize: 14,
+    color: '#2196F3',
+    fontWeight: '500',
+  },
+  arrow: {
+    fontSize: 18,
+    color: '#999',
+  },
+  logoutButton: {
+    backgroundColor: '#fff',
+    marginHorizontal: 16,
+    marginTop: 20,
+    padding: 18,
+    borderRadius: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#ff5252',
+  },
+  logoutButtonText: {
+    color: '#ff5252',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  deleteAccountButton: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 40,
+    padding: 16,
     alignItems: 'center',
   },
-  statValue: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#2196F3',
-  },
-  statLabel: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 4,
-  },
-  achievementsButton: {
-    marginTop: 8,
-    backgroundColor: '#4CAF50',
-  },
-  rateButton: {
-    marginTop: 16,
-    borderColor: '#FFD700',
-  },
-  dangerZone: {
-    borderColor: '#F44336',
-    borderWidth: 1,
-  },
-  dangerTitle: {
-    color: '#F44336',
-  },
-  dangerButton: {
-    borderColor: '#F44336',
-  },
-  warningText: {
-    fontSize: 12,
-    color: '#F44336',
-    marginTop: 8,
-    textAlign: 'center',
-    fontStyle: 'italic',
+  deleteAccountText: {
+    color: '#999',
+    fontSize: 14,
+    textDecorationLine: 'underline',
   },
 });
 

@@ -1,0 +1,10 @@
+{
+  "react-native": {
+    "android": {
+      "google_services_json": "./android/app/google-services.json"
+    },
+    "ios": {
+      "google_services_plist": "./ios/GoogleService-Info.plist"
+    }
+  }
+}
